@@ -1,0 +1,6 @@
+## Interface: 16001, 120001, 120000, 50503, 38000, 20506, 20505, 11509, 11508
+## Title: Auctionator (test stub)
+## Notes: Minimal stand-in for Auctionator v351 used by the MarketSync wowless tests.
+## AllowLoadGameType: camelot, classic, tbc
+
+Auctionator.lua

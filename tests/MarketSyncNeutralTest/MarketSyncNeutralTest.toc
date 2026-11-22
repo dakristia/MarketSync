@@ -1,0 +1,6 @@
+## Interface: 16001, 120001, 120000, 50503, 38000, 20506, 20505, 11509, 11508
+## Title: MarketSync neutral session test
+## Dependencies: MarketSync, Auctionator
+## AllowLoadGameType: camelot, classic, tbc
+
+MarketSyncNeutralTest.lua
