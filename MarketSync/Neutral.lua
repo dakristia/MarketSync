@@ -12,6 +12,9 @@ local neutralSessionCaptureCount = 0
 local neutralSessionVerifiedCount = 0
 local neutralFullScanActive = false
 local neutralFullScanKeys = {}
+local neutralSessionEndPending = false
+local neutralSessionEndToken = 0
+local NEUTRAL_END_TIMEOUT = 60
 
 local NEUTRAL_SUBZONES = {
     ["Booty Bay"] = true,
@@ -281,6 +284,8 @@ end
 function MarketSync.EndNeutralSession()
     if not neutralSessionActive then return false end
     neutralSessionActive = false
+    neutralSessionEndPending = false
+    neutralSessionEndToken = neutralSessionEndToken + 1
 
     local realmDB = MarketSync.GetRealmDB()
     local capturedCount = neutralSessionCaptureCount
@@ -325,11 +330,30 @@ function MarketSync.EndNeutralSession()
     return true
 end
 
+-- Called by Core.lua after it handled ScanComplete or ScanFailed. Ends a session
+-- whose close was deferred because Auctionator was still processing a scan.
+function MarketSync.FinishPendingNeutralSessionEnd()
+    if not neutralSessionEndPending then return end
+    neutralSessionEndPending = false
+    neutralSessionEndToken = neutralSessionEndToken + 1
+    MarketSync.EndNeutralSession()
+end
+
 function MarketSync.HandleAuctionHouseShown()
     -- Auctionator's SetPrice hook is optional. Native scans still need the
     -- same neutral-AH classification and isolated database.
     if MarketSync.SetupNeutralCaptureHook then MarketSync.SetupNeutralCaptureHook() end
     local isNeutral = ResolveNeutralAuctionContext()
+    if neutralSessionEndPending then
+        -- A neutral AH keeps the session that is waiting to end. Any other AH
+        -- ends it now, because its prices must not reach the neutral data.
+        if isNeutral then
+            neutralSessionEndPending = false
+            neutralSessionEndToken = neutralSessionEndToken + 1
+        else
+            MarketSync.FinishPendingNeutralSessionEnd()
+        end
+    end
     if isNeutral then
         MarketSync.BeginNeutralSession()
     end
@@ -337,5 +361,23 @@ function MarketSync.HandleAuctionHouseShown()
 end
 
 function MarketSync.HandleAuctionHouseClosed()
+    if not neutralSessionActive then return false end
+    -- Auctionator finishes a full scan after the AH closes: it keeps calling
+    -- SetPrice, and only then fires ScanComplete. The session has to stay open
+    -- until then, or those prices would land in the faction database and the
+    -- scan would be discarded.
+    if MarketSync.IsNeutralAuctionatorScanActive and MarketSync.IsNeutralAuctionatorScanActive() then
+        if not neutralSessionEndPending then
+            neutralSessionEndPending = true
+            neutralSessionEndToken = neutralSessionEndToken + 1
+            local token = neutralSessionEndToken
+            C_Timer.After(NEUTRAL_END_TIMEOUT, function()
+                if neutralSessionEndPending and token == neutralSessionEndToken then
+                    MarketSync.FinishPendingNeutralSessionEnd()
+                end
+            end)
+        end
+        return true
+    end
     return MarketSync.EndNeutralSession()
 end

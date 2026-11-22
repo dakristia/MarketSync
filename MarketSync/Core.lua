@@ -1007,6 +1007,11 @@ local function RegisterAuctionatorHooks()
             or (MarketSync.IsNeutralAHSession and MarketSync.IsNeutralAHSession())
     end
 
+    -- Neutral.lua asks this when the AH closes, so it can wait for the scan to finish.
+    function MarketSync.IsNeutralAuctionatorScanActive()
+        return fullScanState.active and fullScanState.scope == "N"
+    end
+
     local function WarnGroupedSuffixKeys(keys)
         if not MarketSyncDB or MarketSyncDB.AuctionatorGroupedSuffixWarningShown then return end
         for key in pairs(keys or {}) do
@@ -1088,6 +1093,7 @@ local function RegisterAuctionatorHooks()
         if failedScope == "N" and MarketSync.FailNeutralFullScan then
             MarketSync.FailNeutralFullScan()
         end
+        if MarketSync.FinishPendingNeutralSessionEnd then MarketSync.FinishPendingNeutralSessionEnd() end
     end
 
     local function HandleFullScanComplete(rawScan, isAuctionatorFullScan)
@@ -1127,6 +1133,7 @@ local function RegisterAuctionatorHooks()
                 MarketSync.ObservationAPI.v1.Emit({ event = "finish", scanId = observationScanID,
                     source = "local", scope = "neutral", scanTime = scanTime })
             end
+            if MarketSync.FinishPendingNeutralSessionEnd then MarketSync.FinishPendingNeutralSessionEnd() end
             return
         end
         suppressNextScheduledDBSnapshot = auctionatorDBUpdateRegistered
@@ -1235,6 +1242,7 @@ local function RegisterAuctionatorHooks()
         if not ok then
             ResetFullScanState()
             if MarketSync.FailNeutralFullScan then pcall(MarketSync.FailNeutralFullScan) end
+            if MarketSync.FinishPendingNeutralSessionEnd then pcall(MarketSync.FinishPendingNeutralSessionEnd) end
             MarketSync.Debug("Auctionator scan integration failed: " .. tostring(err))
         end
     end
